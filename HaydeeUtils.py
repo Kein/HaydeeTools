@@ -7,19 +7,19 @@ NAME_LIMIT = 31
 
 def boneRenameBlender(bone_name):
     name = bone_name
-    if name.startswith("SK_R_"):
-        name = "SK_" + name[5:] + "_R"
-    if name.startswith("SK_L_"):
-        name = "SK_" + name[5:] + "_L"
+    if ('_R_' in name):
+        name = name.replace('_R_', '_') + "_R"
+    if ('_L_' in name):
+        name = name.replace('_L_', '_') + "_L"
     return stripName(name)
 
 
 def boneRenameHaydee(bone_name):
     name = bone_name
-    if name.startswith("SK_") and name.endswith("_R"):
-        name = "SK_R_" + name[3:-2]
-    if name.startswith("SK_") and name.endswith("_L"):
-        name = "SK_L_" + name[3:-2]
+    if name.endswith("_R"):
+        name = name[0:-2].replace('_', '_R_')
+    if name.endswith("_L"):
+        name = name[0:-2].replace('_', '_L_')
     return stripName(name)[:NAME_LIMIT]
 
 
