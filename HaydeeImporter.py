@@ -1322,6 +1322,7 @@ def read_motion(operator, context, filepath):
     for frame in range(1, frameCount + 1):
         wm.progress_update(frame - 1)
         context.scene.frame_current = frame
+        bone_name = None
         for name in boneNames:
             bone_name = name
             if not (bone_name in armature.data.bones):
@@ -1491,6 +1492,7 @@ def read_dmotion(operator, context, filepath):
             for frame in range(1, numFrames + 1):
                 wm.progress_update(frame - 1)
                 context.scene.frame_current = frame
+                bone_name = None
                 for name in bones.keys():
                     bone_name = name
                     if not (bone_name in armature.data.bones):
@@ -2080,7 +2082,7 @@ class ImportHaydeeSkin(Operator, ImportHelper):
 # --------------------------------------------------------------------------------
 # .material importer
 # --------------------------------------------------------------------------------
-def read_material(operator, context, filepath):
+def read_material(operator, context, filepath, invert_uv):
     print('Material:', filepath)
     if not bpy.context.view_layer.objects.active or \
             bpy.context.view_layer.objects.active.type != 'MESH':
@@ -2191,7 +2193,7 @@ def read_material(operator, context, filepath):
                         value["value"] = material_path(basedir, vMap)
 
             useAlpha = (propMap.get("type") and propMap["type"]["value"] == 1)
-            create_material(obj, useAlpha, matName, propMap['diffuseMap'].get('value'), propMap['normalMap'].get('value'), propMap['specularMap'].get('value'), propMap['emissionMap'].get('value'))
+            create_material(obj, useAlpha, matName, propMap['diffuseMap'].get('value'), propMap['normalMap'].get('value'), propMap['specularMap'].get('value'), propMap['emissionMap'].get('value'), invert_uv)
 
     return {'FINISHED'}
  
@@ -2206,9 +2208,14 @@ class ImportHaydeeMaterial(Operator, ImportHelper):
         options={'HIDDEN'},
         maxlen=255,  # Max internal buffer length, longer would be clamped.
     )
+    invert_uv: BoolProperty(
+        name="Mirror mesh UVMap.Y",
+        description="Mirrors the UVMap for selected mesh by Y axis (Haydee 2)",
+        default=False,
+    )
 
     def execute(self, context):
-        return read_material(self, context, self.filepath)
+        return read_material(self, context, self.filepath, self.invert_uv)
 
 
 def haydeeFilepath(mainpath, filepath):

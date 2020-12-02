@@ -78,7 +78,7 @@ def load_image(textureFilepath, forceNewTexture=False):
     return image
 
 
-def create_material(obj, useAlpha, mat_name, diffuseFile, normalFile, specularFile, emissionFile):
+def create_material(obj, useAlpha, mat_name, diffuseFile, normalFile, specularFile, emissionFile, invert_uv):
     obj.data.materials.clear()
 
     material = bpy.data.materials.get(mat_name)
@@ -88,8 +88,13 @@ def create_material(obj, useAlpha, mat_name, diffuseFile, normalFile, specularFi
     if useAlpha:
         material.blend_method = 'BLEND'
     obj.data.materials.append(material)
-
     create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, specularFile, emissionFile)
+
+    if (invert_uv and obj.data.uv_layers and len(obj.data.uv_layers) > 0):
+        for layer in obj.data.uv_layers:
+            for loop in layer.data:
+                loop.uv.y = 1 - loop.uv.y
+
 
 
 def create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, specularFile, emissionFile):
