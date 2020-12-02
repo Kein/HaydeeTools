@@ -19,6 +19,7 @@ $RECYCLE.BIN/
 
 # VScode ignore
 .vscode
+.env
 
 # =========================
 # Operating System Files
