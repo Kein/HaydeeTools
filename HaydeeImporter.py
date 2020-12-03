@@ -228,8 +228,8 @@ def read_fixes_data(memData, propMap, fix_data):
     unpack_fixes = struct.Struct('<5I').unpack
     for n in range(fixes_count):
         offset = (FIXES_SIZE * n)
-        (type, flags, fix1, fix2, index) = unpack_fixes(memData[offset:offset + FIXES_SIZE])
-        fix_data[index] = ({'type': type, 'flags': flags, 'fix1': fix1, 'fix2': fix2})
+        (type, order, child, parent_target, index) = unpack_fixes(memData[offset:offset + FIXES_SIZE])
+        fix_data[index] = ({'type': type, 'flags': order, 'fix1': child, 'fix2': parent_target})
     return True
 
 def read_skel(operator, context, filepath):
@@ -1968,24 +1968,24 @@ def read_skin(operator, context, filepath, armature_ob):
                 return {'FINISHED'}
 
             offset = SIGNATURE_SIZE + (CHUNK_SIZE * chunkCount)
-            (vertCount, boneCount) = \
+            (numWeights, numBinds) = \
                 struct.unpack('II', data[offset:offset + INIT_INFO])
 
-            vert_data = []
+            weights_data = []
             headerSize = SIGNATURE_SIZE + (CHUNK_SIZE * chunkCount) + INIT_INFO
             delta = headerSize
-            for n in range(vertCount):
+            for n in range(numWeights):
                 offset = delta + (VERT_SIZE * n)
                 (w1, w2, w3, w4, b1, b2, b3, b4) = \
                     struct.unpack('4f4B', data[offset:offset + VERT_SIZE])
 
                 weights = ((b1, w1), (b2, w2), (b3, w3), (b4, w4))
-                vert_data.append(weights)
+                weights_data.append(weights)
 
-            bone_data = []
+            binds_data = []
 
-            delta = headerSize + (VERT_SIZE * vertCount)
-            for n in range(boneCount):
+            delta = headerSize + (VERT_SIZE * numWeights)
+            for n in range(numBinds):
                 offset = delta + (BONE_SIZE * n)
                 (name,
                     f1, f2, f3, f4,
@@ -2002,15 +2002,15 @@ def read_skin(operator, context, filepath, armature_ob):
                               (f9, f10, f11, f12),
                               (f13, f14, f15, f16)))
                 vec = Vector((vx, vy, vz, vw))
-                bone_data.append({'name': name, 'mat': mat, 'vec': vec})
+                binds_data.append({'name': name, 'mat': mat, 'vec': vec})
 
             mesh_obj = bpy.context.view_layer.objects.active
 
-            for vertIdx, v_data in enumerate(vert_data):
+            for vertIdx, v_data in enumerate(weights_data):
                 for boneIdx, vertexWeight in v_data:
 
                     if (boneIdx != 0 or vertexWeight != 0):
-                        boneName = bone_data[boneIdx]['name']
+                        boneName = binds_data[boneIdx]['name']
                         vertGroup = mesh_obj.vertex_groups.get(boneName)
                         if not vertGroup:
                             vertGroup = mesh_obj.vertex_groups.new(name=boneName)
@@ -2029,14 +2029,14 @@ def read_skin(operator, context, filepath, armature_ob):
             bpy.ops.object.mode_set(mode='EDIT')
 
             # create all Bones
-            progress.enter_substeps(boneCount, "create bones")
+            progress.enter_substeps(numBinds, "create bones")
             # Axis Orientation
             axis_orient = Quaternion((1, 0, 0), -pi / 2).to_matrix().to_4x4()
             # Bone Orientation
             r1 = Quaternion((0, 0, 1), pi / 2).to_matrix().to_4x4()
             r2 = Quaternion((0, 1, 0), -pi / 2).to_matrix().to_4x4()
             bone_orient = r1 @ r2
-            for idx, b_data in enumerate(bone_data):
+            for idx, b_data in enumerate(binds_data):
                 boneName = b_data['name']
                 if not armature_ob.data.edit_bones.get(boneName):
                     mat = b_data['mat']

@@ -1,7 +1,9 @@
 # <pep8 compliant>
 
-import bpy
 import os
+import bpy
+import concurrent.futures as futures
+import numpy as np
 from mathutils import Vector
 
 COLOR_SPACE_NONE = 'Non-Color'
@@ -56,16 +58,19 @@ NODE_SOCKET_VECTOR = 'NodeSocketVector'
 
 DEFAULT_PBR_POWER = .5
 
-
-def load_image(textureFilepath, forceNewTexture=False):
+def load_image(textureFilepath, flipPixelsY, forceNewTexture=False):
     image = None
     if textureFilepath:
         textureFilename = os.path.basename(textureFilepath)
-        fileRoot, fileExt = os.path.splitext(textureFilename)
-
         if (os.path.exists(textureFilepath)):
             print("Loading Texture: " + textureFilename)
             image = bpy.data.images.load(filepath=textureFilepath, check_existing=not forceNewTexture)
+            if (flipPixelsY):
+                if (hasattr(image.pixels, 'foreach_set')):
+                    image.pixels.foreach_set(np.reshape(image.pixels[:],(image.size[1], image.size[0], 4))[::1].ravel())
+                else:
+                    image.pixels[:] = np.reshape(image.pixels[:],(image.size[1], image.size[0], 4))[::-1].ravel()
+                image.pack()
         else:
             print("Warning. Texture not found " + textureFilename)
             image = bpy.data.images.new(
@@ -74,7 +79,6 @@ def load_image(textureFilepath, forceNewTexture=False):
             image.source = 'FILE'
             image.filepath = textureFilepath
         image.alpha_mode = ALPHA_MODE_CHANNEL
-
     return image
 
 
@@ -88,29 +92,30 @@ def create_material(obj, useAlpha, mat_name, diffuseFile, normalFile, specularFi
     if useAlpha:
         material.blend_method = 'BLEND'
     obj.data.materials.append(material)
-    create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, specularFile, emissionFile)
-
-    if (invert_uv and obj.data.uv_layers and len(obj.data.uv_layers) > 0):
-        for layer in obj.data.uv_layers:
-            for loop in layer.data:
-                loop.uv.y = 1 - loop.uv.y
+    create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, specularFile, emissionFile, invert_uv)
 
 
-
-def create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, specularFile, emissionFile):
+def create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, specularFile, emissionFile, invert_uv):
     # Nodes
     node_tree = material.node_tree
     node_tree.nodes.clear()
     col_width = 200
 
+    dImage, nImage, sImage, eImage = None, None, None, None
+    with futures.ThreadPoolExecutor(max_workers=4) as e:
+        dImage = e.submit(load_image, diffuseFile, invert_uv)
+        nImage = e.submit(load_image, normalFile, invert_uv)
+        sImage = e.submit(load_image, specularFile, invert_uv)
+        eImage = e.submit(load_image, emissionFile, invert_uv, True)
+
     diffuseTextureNode = node_tree.nodes.new(TEXTURE_IMAGE_NODE)
     diffuseTextureNode.label = 'Diffuse'
-    diffuseTextureNode.image = load_image(diffuseFile)
+    diffuseTextureNode.image = dImage.result()
     diffuseTextureNode.location = Vector((0, 0))
 
     specularTextureNode = node_tree.nodes.new(TEXTURE_IMAGE_NODE)
     specularTextureNode.label = 'Roughness Specular Metalic'
-    specularTextureNode.image = load_image(specularFile)
+    specularTextureNode.image = sImage.result()
     if (specularTextureNode.image):
         try:
             specularTextureNode.image.colorspace_settings.name = COLOR_SPACE_NONE
@@ -120,7 +125,7 @@ def create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, spec
 
     normalTextureRgbNode = node_tree.nodes.new(TEXTURE_IMAGE_NODE)
     normalTextureRgbNode.label = 'Haydee Normal'
-    normalTextureRgbNode.image = load_image(normalFile)
+    normalTextureRgbNode.image = nImage.result()
     if normalTextureRgbNode.image:
         try:
             normalTextureRgbNode.image.colorspace_settings.name = COLOR_SPACE_NONE
@@ -130,7 +135,7 @@ def create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, spec
 
     normalTextureAlphaNode = node_tree.nodes.new(TEXTURE_IMAGE_NODE)
     normalTextureAlphaNode.label = 'Haydee Normal Alpha'
-    normalTextureAlphaNode.image = load_image(normalFile, True)
+    normalTextureAlphaNode.image = nImage.result()
     if normalTextureAlphaNode.image:
         try:
             normalTextureAlphaNode.image.colorspace_settings.name = COLOR_SPACE_NONE
@@ -147,7 +152,7 @@ def create_cycle_node_material(material, useAlpha, diffuseFile, normalFile, spec
 
     emissionTextureNode = node_tree.nodes.new(TEXTURE_IMAGE_NODE)
     emissionTextureNode.label = 'Emission'
-    emissionTextureNode.image = load_image(emissionFile)
+    emissionTextureNode.image = eImage.result()
     emissionTextureNode.location = diffuseTextureNode.location + Vector((0, 260))
 
     separateRgbNode = node_tree.nodes.new(SHADER_NODE_SEPARATE_RGB)
